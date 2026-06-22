@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="fr">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>Gestion IP</title>
+		<style>
+			:root {
+				color-scheme: dark;
+				--bg: #0b1020;
+				--panel: #121a30;
+				--panel-2: #0f172a;
+				--text: #e6edf7;
+				--muted: #9aa7bd;
+				--ok: #16a34a;
+				--warn: #f59e0b;
+				--bad: #ef4444;
+				--border: #1f2a44;
+				--accent: #60a5fa;
+			}
+
+			* {
+				box-sizing: border-box;
+			}
+
+			body {
+				margin: 0;
+				font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+				background: radial-gradient(1200px 800px at 10% 10%, #0f1a36, #070b16);
+				color: var(--text);
+				min-height: 100vh;
+			}
+
+			header {
+				padding: 24px 28px 10px;
+			}
+
+			h1 {
+				margin: 0 0 6px;
+				font-size: 22px;
+				font-weight: 600;
+			}
+
+			p {
+				margin: 0;
+				color: var(--muted);
+			}
+
+			main {
+				padding: 18px 28px 32px;
+			}
+
+			.grid {
+				display: grid;
+				grid-template-columns: 1fr 2fr;
+				gap: 18px;
+				align-items: start;
+			}
+
+			.card {
+				background: linear-gradient(180deg, var(--panel), var(--panel-2));
+				border: 1px solid var(--border);
+				border-radius: 12px;
+				padding: 16px;
+				box-shadow: 0 10px 24px rgba(0, 0, 0, 0.25);
+			}
+
+			.card h2 {
+				margin: 0 0 12px;
+				font-size: 16px;
+			}
+
+			label {
+				display: block;
+				color: var(--muted);
+				margin-bottom: 6px;
+				font-size: 13px;
+			}
+
+			input[type="text"] {
+				width: 100%;
+				padding: 10px 12px;
+				border-radius: 8px;
+				border: 1px solid var(--border);
+				background: #0b1225;
+				color: var(--text);
+				outline: none;
+			}
+
+			.actions {
+				display: flex;
+				gap: 10px;
+				margin-top: 12px;
+			}
+
+			button {
+				border: none;
+				padding: 10px 14px;
+				border-radius: 8px;
+				background: var(--accent);
+				color: #0b1220;
+				font-weight: 600;
+				cursor: pointer;
+			}
+
+			button.secondary {
+				background: #1e293b;
+				color: var(--text);
+				border: 1px solid var(--border);
+			}
+
+			button.ghost {
+				background: transparent;
+				border: 1px dashed var(--border);
+				color: var(--muted);
+			}
+
+			.ip-list {
+				width: 100%;
+				border-collapse: collapse;
+			}
+
+			.ip-list th,
+			.ip-list td {
+				text-align: left;
+				padding: 10px 8px;
+				border-bottom: 1px solid var(--border);
+				font-size: 14px;
+			}
+
+			.ip-list th {
+				color: var(--muted);
+				font-weight: 500;
+			}
+
+			.status {
+				display: inline-flex;
+				align-items: center;
+				gap: 6px;
+				font-weight: 600;
+			}
+
+			.dot {
+				width: 8px;
+				height: 8px;
+				border-radius: 50%;
+				background: var(--warn);
+				box-shadow: 0 0 8px rgba(245, 158, 11, 0.6);
+			}
+
+			.status.online .dot {
+				background: var(--ok);
+				box-shadow: 0 0 8px rgba(22, 163, 74, 0.6);
+			}
+
+			.status.offline .dot {
+				background: var(--bad);
+				box-shadow: 0 0 8px rgba(239, 68, 68, 0.6);
+			}
+
+			.small {
+				font-size: 12px;
+				color: var(--muted);
+			}
+
+			.footer-note {
+				margin-top: 12px;
+				color: var(--muted);
+				font-size: 12px;
+			}
+
+			.empty {
+				padding: 14px;
+				text-align: center;
+				color: var(--muted);
+				border: 1px dashed var(--border);
+				border-radius: 8px;
+			}
+
+			@media (max-width: 900px) {
+				.grid {
+					grid-template-columns: 1fr;
+				}
+			}
+		</style>
+	</head>
+	<body>
+		<header>
+			<h1>Gestion des IP</h1>
+			<p>Ping toutes les 30 secondes pour vérifier si une IP est allumée.</p>
+		</header>
+
+		<main class="grid">
+			<section class="card">
+				<h2>Ajouter une IP</h2>
+				<label for="ipInput">Adresse IP ou nom d'hôte</label>
+				<input id="ipInput" type="text" placeholder="192.168.1.10 ou serveur-local" />
+				<div class="actions">
+					<button id="addBtn">Ajouter</button>
+					<button id="refreshBtn" class="secondary">Actualiser</button>
+					<button id="clearBtn" class="ghost">Vider la liste</button>
+				</div>
+				<p class="footer-note">
+					La liste est sauvegardée dans le navigateur (localStorage).
+				</p>
+			</section>
+
+			<section class="card">
+				<h2>Statut des IP</h2>
+				<div id="listContainer"></div>
+				<p class="footer-note" id="lastRun">Dernier ping : —</p>
+			</section>
+		</main>
+
+		<script>
+			const STORAGE_KEY = "fuidjuitsu_rx200_s7_ips";
+			const PING_INTERVAL_MS = 30000;
+			const TIMEOUT_MS = 4000;
+
+			const ipInput = document.getElementById("ipInput");
+			const addBtn = document.getElementById("addBtn");
+			const refreshBtn = document.getElementById("refreshBtn");
+			const clearBtn = document.getElementById("clearBtn");
+			const listContainer = document.getElementById("listContainer");
+			const lastRun = document.getElementById("lastRun");
+
+			let ipList = loadIps();
+			let timerId = null;
+
+			function normalizeTarget(value) {
+				const trimmed = value.trim();
+				if (!trimmed) return null;
+				return trimmed;
+			}
+
+			function loadIps() {
+				try {
+					const raw = localStorage.getItem(STORAGE_KEY);
+					return raw ? JSON.parse(raw) : [];
+				} catch {
+					return [];
+				}
+			}
+
+			function saveIps() {
+				localStorage.setItem(STORAGE_KEY, JSON.stringify(ipList));
+			}
+
+			function renderList(statusMap = {}) {
+				if (!ipList.length) {
+					listContainer.innerHTML = `<div class="empty">Aucune IP enregistrée.</div>`;
+					return;
+				}
+
+				const rows = ipList
+					.map((ip, index) => {
+						const status = statusMap[ip] || { state: "pending", label: "En attente" };
+						const statusClass = status.state;
+						return `
+							<tr>
+								<td>${ip}</td>
+								<td>
+									<span class="status ${statusClass}">
+										<span class="dot"></span>
+										${status.label}
+									</span>
+								</td>
+								<td class="small">${status.time || "—"}</td>
+								<td>
+									<button class="secondary" data-remove="${index}">Supprimer</button>
+								</td>
+							</tr>
+						`;
+					})
+					.join("");
+
+				listContainer.innerHTML = `
+					<table class="ip-list">
+						<thead>
+							<tr>
+								<th>IP / URL</th>
+								<th>Statut</th>
+								<th>Dernier ping</th>
+								<th>Action</th>
+							</tr>
+						</thead>
+						<tbody>${rows}</tbody>
+					</table>
+				`;
+
+				listContainer.querySelectorAll("button[data-remove]").forEach((btn) => {
+					btn.addEventListener("click", () => {
+						const index = Number(btn.dataset.remove);
+						ipList.splice(index, 1);
+						saveIps();
+						renderList();
+						runPingSweep();
+					});
+				});
+			}
+
+			async function pingTarget(target) {
+				const controller = new AbortController();
+				const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
+				try {
+					const response = await fetch("/api/ping", {
+						method: "POST",
+						headers: { "Content-Type": "application/json" },
+						body: JSON.stringify({ target }),
+						signal: controller.signal,
+					});
+
+					if (!response.ok) {
+						return { state: "offline", label: "Hors ligne" };
+					}
+
+					const data = await response.json();
+					if (data.online) {
+						return { state: "online", label: `En ligne (${data.rtt_ms} ms)` };
+					}
+					return { state: "offline", label: "Hors ligne" };
+				} catch {
+					return { state: "offline", label: "Hors ligne" };
+				} finally {
+					clearTimeout(timeoutId);
+				}
+			}
+
+			async function runPingSweep() {
+				if (!ipList.length) {
+					renderList();
+					return;
+				}
+				const statusMap = {};
+				renderList();
+				const timeLabel = new Date().toLocaleTimeString();
+				for (const ip of ipList) {
+					  const result = await pingTarget(ip);
+					statusMap[ip] = { ...result, time: timeLabel };
+					renderList(statusMap);
+				}
+				lastRun.textContent = `Dernier ping : ${timeLabel}`;
+			}
+
+			function schedulePings() {
+				if (timerId) clearInterval(timerId);
+				timerId = setInterval(runPingSweep, PING_INTERVAL_MS);
+			}
+
+			addBtn.addEventListener("click", () => {
+				const normalized = normalizeTarget(ipInput.value);
+				if (!normalized) return;
+				if (ipList.includes(normalized)) return;
+				ipList.push(normalized);
+				saveIps();
+				ipInput.value = "";
+				renderList();
+				runPingSweep();
+			});
+
+			refreshBtn.addEventListener("click", runPingSweep);
+
+			clearBtn.addEventListener("click", () => {
+				ipList = [];
+				saveIps();
+				renderList();
+			});
+
+			renderList();
+			runPingSweep();
+			schedulePings();
+		</script>
+	</body>
+</html>
